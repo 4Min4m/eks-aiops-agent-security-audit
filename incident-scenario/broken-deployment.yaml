@@ -1,0 +1,41 @@
+# Deliberately broken demo workload — Phase 0's chosen incident scenario:
+# "a pod is CrashLoopBackOff." Deployed into the `httpbin` namespace
+# alongside the real httpbin app so the agent's Loki/Prometheus queries have
+# a realistic neighborhood to search in, but as its own Deployment so it
+# never touches the real httpbin pods.
+#
+# The break is intentional and simple: the container's command exits
+# non-zero immediately, so kubelet restarts it with exponential backoff —
+# textbook CrashLoopBackOff, easy to trigger on demand and easy to fix
+# (delete the deployment) when the demo's done.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crashy-demo
+  namespace: httpbin
+  labels:
+    app.kubernetes.io/name: crashy-demo
+    app.kubernetes.io/part-of: aiops-agent-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: crashy-demo
+  template:
+    metadata:
+      labels:
+        app: crashy-demo
+    spec:
+      containers:
+        - name: crashy
+          image: busybox:1.36
+          command: ["/bin/sh", "-c"]
+          args:
+            - "echo 'simulated fatal error: config file not found at /etc/crashy/config.yaml' >&2; exit 1"
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 50m
+              memory: 32Mi
