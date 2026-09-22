@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aiops-agent
+  namespace: aiops-agent
+  labels:
+    app: aiops-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aiops-agent
+  template:
+    metadata:
+      labels:
+        app: aiops-agent
+    spec:
+      serviceAccountName: aiops-agent
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+      containers:
+        - name: aiops-agent
+          image: amin4m/aiops-agent:latest # build from agent/Dockerfile, push to registry
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: aiops-agent-config
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          volumeMounts:
+            - name: reports
+              mountPath: /app/incident-reports
+      volumes:
+        - name: reports
+          emptyDir: {}
+          # emptyDir means reports don't survive pod restarts — fine for a
+          # demo, called out explicitly so it doesn't read as an oversight.
+          # For anything longer-lived, mount a PVC instead.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aiops-agent-config
+  namespace: aiops-agent
+data:
+  OLLAMA_BASE_URL: "http://ollama.aiops-agent.svc.cluster.local:11434"
+  OLLAMA_MODEL: "llama3.1:8b"
+  LOKI_BASE_URL: "http://loki-gateway.monitoring.svc.cluster.local"
+  PROMETHEUS_BASE_URL: "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090"
+  TARGET_NAMESPACE: "httpbin"
+  REPORT_OUTPUT_DIR: "/app/incident-reports"
+  AGENTO11Y_SERVICE_NAME: "aiops-investigator-agent"
