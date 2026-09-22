@@ -1,0 +1,44 @@
+# Loki ruler alerts (LogQL) for the two audit signals from Phase 1.
+# Deploy via the loki-ruler sidecar (kube-prometheus-stack's Grafana already
+# has an Alertmanager to send these to — same Alertmanager the AIOps agent's
+# webhook in ../agent/ listens on).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loki-security-audit-rules
+  namespace: monitoring
+  labels:
+    # Matches the label the Loki Helm chart's ruler sidecar watches for.
+    loki_rule: "true"
+data:
+  security-audit.yaml: |
+    groups:
+      - name: k8s-security-audit
+        rules:
+          - alert: RBACRoleOrBindingChanged
+            expr: |
+              sum(count_over_time({source="k8s-audit", object_ref_res=~"roles|rolebindings|clusterroles|clusterrolebindings"}[5m])) > 0
+            for: 0m
+            labels:
+              severity: warning
+              category: security-audit
+            annotations:
+              summary: "RBAC object changed in the cluster"
+              description: >-
+                A Role/RoleBinding/ClusterRole/ClusterRoleBinding was
+                created, updated, or deleted in the last 5 minutes. Check the
+                k8s-security-audit dashboard's RBAC panel for who and what.
+
+          - alert: PodExecOrAttach
+            expr: |
+              sum(count_over_time({source="k8s-audit", object_ref_res="pods", subresource=~"exec|attach"}[1m])) > 0
+            for: 0m
+            labels:
+              severity: warning
+              category: security-audit
+            annotations:
+              summary: "kubectl exec/attach into a pod"
+              description: >-
+                Someone ran `kubectl exec` or `kubectl attach` against a pod
+                in the last minute. Check the k8s-security-audit dashboard's
+                exec panel for the user, namespace, and pod.
