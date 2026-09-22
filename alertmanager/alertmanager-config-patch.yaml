@@ -1,0 +1,26 @@
+# Patch to kube-prometheus-stack's Alertmanager config (via the
+# `alertmanager.config` Helm value in Project 1's
+# gitops/apps/monitoring.yaml, or an AlertmanagerConfig CRD if you'd rather
+# keep this decoupled from the main Helm values — CRD approach shown below
+# since it doesn't require touching Project 1's existing file).
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: aiops-agent-webhook
+  namespace: monitoring
+  labels:
+    # Matches kube-prometheus-stack's default alertmanagerConfigSelector.
+    release: kube-prometheus-stack
+spec:
+  route:
+    receiver: aiops-agent
+    matchers:
+      - name: category
+        value: aiops-investigation
+        matchType: "="
+    continue: true # also let the default route (e.g. Slack/email) fire
+  receivers:
+    - name: aiops-agent
+      webhookConfigs:
+        - url: "http://aiops-agent.aiops-agent.svc.cluster.local:8080/webhook/alertmanager"
+          sendResolved: false
