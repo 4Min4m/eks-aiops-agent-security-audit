@@ -1,0 +1,50 @@
+# Grafana Alloy, deployed as a Deployment (not a DaemonSet — it's reading
+# EKS control-plane audit logs from CloudWatch, not tailing node-local
+# files, so one replica is the right topology here).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: alloy-audit
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: eks-httpbin-alb
+  source:
+    repoURL: https://grafana.github.io/helm-charts
+    chart: alloy
+    targetRevision: "0.12.2" # EXAMPLE — verify & pin with `helm search repo grafana/alloy --versions`
+    helm:
+      values: |
+        alloy:
+          configMap:
+            create: true
+            content: |
+              # Loaded from security-audit/alloy-config.alloy — kept as a
+              # separate file in this repo (not duplicated here) so it's
+              # easy to diff/lint on its own. See that file for the full
+              # pipeline and comments.
+          extraPorts:
+            - name: cw-firehose
+              port: 9880
+              targetPort: 9880
+              protocol: TCP
+        controller:
+          type: deployment
+          replicas: 1
+        serviceAccount:
+          create: true
+          annotations:
+            # IRSA role granting logs:FilterLogEvents / logs:GetLogEvents on
+            # the EKS audit log group only — least privilege, read-only.
+            eks.amazonaws.com/role-arn: "arn:aws:iam::CHANGE-ME:role/alloy-audit-reader"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
