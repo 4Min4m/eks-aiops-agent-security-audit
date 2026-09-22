@@ -1,0 +1,32 @@
+# PrometheusRule — fires when a pod in the httpbin namespace is
+# CrashLoopBackOff. Deployed via Argo CD like the rest of Project 1's
+# resources; kube-prometheus-stack's Prometheus Operator picks up
+# PrometheusRule CRDs automatically.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: aiops-crashloop-demo
+  namespace: monitoring
+  labels:
+    # Matches the ruleSelector kube-prometheus-stack is configured with in
+    # Project 1's gitops/apps/monitoring.yaml (ruleSelectorNilUsesHelmValues:
+    # false → picks up all PrometheusRules cluster-wide).
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: aiops-demo-scenario
+      rules:
+        - alert: PodCrashLoopBackOff
+          expr: |
+            kube_pod_container_status_waiting_reason{reason="CrashLoopBackOff", namespace="httpbin"} == 1
+          for: 1m
+          labels:
+            severity: critical
+            category: aiops-investigation
+          annotations:
+            summary: "Pod {{ $labels.pod }} is CrashLoopBackOff"
+            description: >-
+              Container {{ $labels.container }} in pod {{ $labels.pod }}
+              (namespace {{ $labels.namespace }}) has been in
+              CrashLoopBackOff for at least 1 minute. Routed to the AIOps
+              investigator agent via the Alertmanager webhook receiver.
