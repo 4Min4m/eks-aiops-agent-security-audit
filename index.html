@@ -1,0 +1,448 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AIOps Incident-Investigation Agent — Amin Amini</title>
+<meta name="description" content="A read-only LangGraph agent that investigates Kubernetes incidents, plus a scoped K8s security-audit pipeline. Built on EKS, instrumented end to end." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0B1220;
+    --bg-alt:#0E1830;
+    --panel:#121B2E;
+    --panel-border:#233149;
+    --text:#E4EAF2;
+    --text-muted:#8C99B2;
+    --amber:#F0A93C;
+    --teal:#35D0BA;
+    --red:#EF6B79;
+    --mono: 'IBM Plex Mono', ui-monospace, monospace;
+    --sans: 'IBM Plex Sans', -apple-system, sans-serif;
+    --maxw: 860px;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--sans);
+    line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--teal);}
+  a:focus-visible, button:focus-visible{outline:2px solid var(--teal); outline-offset:2px;}
+  .wrap{max-width:var(--maxw); margin:0 auto; padding:0 24px;}
+  .wrap-wide{max-width:1080px; margin:0 auto; padding:0 24px;}
+
+  /* ---------- Nav ---------- */
+  nav{
+    position:sticky; top:0; z-index:10;
+    background:rgba(11,18,32,0.88);
+    backdrop-filter:blur(8px);
+    border-bottom:1px solid var(--panel-border);
+  }
+  nav .wrap-wide{display:flex; align-items:center; justify-content:space-between; height:60px;}
+  .brand{font-family:var(--mono); font-size:15px; color:var(--text); text-decoration:none; letter-spacing:0.2px;}
+  .brand span{color:var(--amber);}
+  nav .links{display:flex; gap:22px; font-size:14px;}
+  nav .links a{color:var(--text-muted); text-decoration:none;}
+  nav .links a:hover{color:var(--text);}
+
+  /* ---------- Hero ---------- */
+  header.hero{padding:76px 0 64px; border-bottom:1px solid var(--panel-border);}
+  .hero-grid{display:grid; grid-template-columns:1.1fr 1fr; gap:48px; align-items:center;}
+  @media (max-width:860px){ .hero-grid{grid-template-columns:1fr;} }
+
+  .kicker{font-family:var(--mono); font-size:13px; color:var(--amber); margin:0 0 14px;}
+  h1{
+    font-family:var(--sans); font-weight:700;
+    font-size:clamp(30px,4vw,42px);
+    line-height:1.15; margin:0 0 18px; letter-spacing:-0.01em;
+  }
+  .lede{color:var(--text-muted); font-size:17px; margin:0 0 26px; max-width:52ch;}
+  .cta-row{display:flex; gap:12px; flex-wrap:wrap;}
+  .btn{
+    display:inline-flex; align-items:center; gap:8px;
+    padding:11px 18px; border-radius:6px; font-size:14px; font-weight:600;
+    text-decoration:none; border:1px solid transparent; font-family:var(--sans);
+  }
+  .btn-primary{background:var(--amber); color:#1A1206;}
+  .btn-primary:hover{background:#f7b658;}
+  .btn-secondary{border-color:var(--panel-border); color:var(--text);}
+  .btn-secondary:hover{border-color:var(--teal); color:var(--teal);}
+
+  .stat-row{display:flex; gap:28px; margin-top:34px; flex-wrap:wrap;}
+  .stat b{display:block; font-family:var(--mono); font-size:22px; color:var(--text);}
+  .stat span{font-size:13px; color:var(--text-muted);}
+
+  /* ---------- Terminal ---------- */
+  .terminal{
+    background:#0A0F1C; border:1px solid var(--panel-border); border-radius:8px;
+    box-shadow:0 20px 50px -20px rgba(0,0,0,0.6);
+    font-family:var(--mono); font-size:12.5px; overflow:hidden;
+  }
+  .terminal .bar{
+    display:flex; gap:6px; padding:10px 12px; background:#0D1424; border-bottom:1px solid var(--panel-border);
+  }
+  .dot{width:9px; height:9px; border-radius:50%;}
+  .dot.r{background:#EF6B79;} .dot.y{background:#F0A93C;} .dot.g{background:#35D0BA;}
+  .terminal pre{margin:0; padding:18px 16px; color:#C9D4E6; min-height:260px; white-space:pre-wrap;}
+  .terminal .c-amber{color:var(--amber);}
+  .terminal .c-teal{color:var(--teal);}
+  .terminal .c-muted{color:#5C6C88;}
+  .cursor{display:inline-block; width:7px; height:14px; background:var(--teal); vertical-align:middle; animation:blink 1s steps(1) infinite;}
+  @keyframes blink{50%{opacity:0;}}
+
+  /* ---------- Sections ---------- */
+  section{padding:64px 0;}
+  section.alt{background:var(--bg-alt); border-top:1px solid var(--panel-border); border-bottom:1px solid var(--panel-border);}
+  h2{font-size:26px; margin:0 0 8px; letter-spacing:-0.01em;}
+  .section-intro{color:var(--text-muted); max-width:62ch; margin:0 0 36px;}
+
+  /* Feature panels (justified by content: three distinct pipeline stages, not a generic 3-card grid) */
+  .feature-list{display:flex; flex-direction:column; gap:0;}
+  .feature{
+    display:grid; grid-template-columns:220px 1fr; gap:28px;
+    padding:26px 0; border-top:1px solid var(--panel-border);
+  }
+  .feature:last-child{border-bottom:1px solid var(--panel-border);}
+  @media (max-width:700px){ .feature{grid-template-columns:1fr; gap:8px;} }
+  .feature h3{margin:0; font-size:17px; font-family:var(--mono); font-weight:600;}
+  .feature h3 .tag{display:block; font-family:var(--sans); font-weight:400; font-size:13px; color:var(--text-muted); margin-top:4px;}
+  .feature p{margin:0; color:var(--text-muted); font-size:15px;}
+  .feature p code{color:var(--teal); font-family:var(--mono); font-size:13px;}
+
+  /* Architecture diagram */
+  .diagram{
+    background:var(--panel); border:1px solid var(--panel-border); border-radius:8px;
+    padding:28px 20px; overflow-x:auto;
+  }
+  .diagram svg{display:block; margin:0 auto; min-width:640px;}
+  .diagram-caption{font-size:13px; color:var(--text-muted); margin-top:14px; text-align:center;}
+
+  /* Safety-by-design two-column */
+  .layers{display:grid; grid-template-columns:1fr 1fr; gap:20px;}
+  @media (max-width:700px){ .layers{grid-template-columns:1fr;} }
+  .layer-card{
+    background:var(--panel); border:1px solid var(--panel-border); border-radius:8px; padding:22px;
+    border-top:3px solid var(--teal);
+  }
+  .layer-card.b{border-top-color:var(--amber);}
+  .layer-card h4{margin:0 0 10px; font-family:var(--mono); font-size:14px; color:var(--text);}
+  .layer-card p{margin:0; color:var(--text-muted); font-size:14.5px;}
+
+  /* Media placeholders */
+  .placeholder{
+    border:1px dashed #3A4C6B; border-radius:8px; background:#0E1729;
+    padding:40px 20px; text-align:center; color:var(--text-muted); font-size:14px;
+  }
+  .placeholder .ph-label{font-family:var(--mono); color:var(--amber); font-size:12.5px; display:block; margin-bottom:8px;}
+  .media-grid{display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-top:8px;}
+  @media (max-width:700px){ .media-grid{grid-template-columns:1fr;} }
+
+  /* Stack strip */
+  .stack{display:flex; flex-wrap:wrap; gap:10px 14px; font-family:var(--mono); font-size:13px; color:var(--text-muted);}
+  .stack span{padding:6px 10px; border:1px solid var(--panel-border); border-radius:5px;}
+
+  /* Non-goals */
+  .nongoals{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:10px;}
+  .nongoals li{padding-left:22px; position:relative; color:var(--text-muted); font-size:14.5px;}
+  .nongoals li::before{content:"—"; position:absolute; left:0; color:var(--red);}
+
+  footer{padding:44px 0 60px; border-top:1px solid var(--panel-border);}
+  footer .wrap{display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;}
+  footer p{color:var(--text-muted); font-size:13.5px; margin:0;}
+  footer .links a{color:var(--text-muted); margin-left:18px; text-decoration:none; font-size:13.5px;}
+  footer .links a:hover{color:var(--teal);}
+
+  @media (prefers-reduced-motion: reduce){
+    .cursor{animation:none;}
+    html{scroll-behavior:auto;}
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap-wide">
+    <a class="brand" href="#top">aiops<span>-</span>agent</a>
+    <div class="links">
+      <a href="#how-it-works">How it works</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#safety">Safety</a>
+      <a href="#demo">Demo</a>
+      <a href="https://github.com/4Min4m/eks-aiops-agent-security-audit">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap-wide hero-grid">
+    <div>
+      <p class="kicker">Kubernetes · LangGraph · Grafana Stack</p>
+      <h1>An incident-investigation agent that only ever looks, never touches.</h1>
+      <p class="lede">A two-node LangGraph agent investigates a live Kubernetes incident — logs, metrics, pod state — and writes a cited, read-only report. Alongside it, a scoped audit pipeline watches for RBAC changes and interactive pod access. Built on EKS, instrumented with Grafana's agent-observability tooling.</p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="https://github.com/4Min4m/eks-aiops-agent-security-audit">View the repo</a>
+        <a class="btn btn-secondary" href="#how-it-works">See how it works</a>
+      </div>
+      <div class="stat-row">
+        <div class="stat"><b>2</b><span>graph nodes, by design</span></div>
+        <div class="stat"><b>0</b><span>write-capable tool calls</span></div>
+        <div class="stat"><b>1</b><span>incident type, done properly</span></div>
+      </div>
+    </div>
+    <div class="terminal" aria-hidden="true">
+      <div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span></div>
+      <pre id="term-out"></pre>
+    </div>
+  </div>
+</header>
+
+<section id="how-it-works">
+  <div class="wrap">
+    <h2>What actually happens</h2>
+    <p class="section-intro">Alertmanager pushes; the agent reacts. No polling, no chat window that only works when someone's watching — every run leaves a file behind.</p>
+    <div class="feature-list">
+      <div class="feature">
+        <h3>Investigator<span class="tag">node 1</span></h3>
+        <p>Given an alert, pulls the same evidence an on-call engineer would check first: recent logs from <code>Loki</code>, the restart-count metric from <code>Prometheus</code>, and a pod describe via the read-only Kubernetes API. No interpretation yet — just gathering.</p>
+      </div>
+      <div class="feature">
+        <h3>Reporter<span class="tag">node 2</span></h3>
+        <p>Turns that evidence into three things: a likely cause, the specific evidence for it, and one suggested next diagnostic step. Never a fix, never an action — it has no tool that could take one.</p>
+      </div>
+      <div class="feature">
+        <h3>Security audit<span class="tag">parallel pipeline</span></h3>
+        <p>A scoped Kubernetes audit policy watches for exactly two signals — RBAC object changes and <code>kubectl exec</code> — shipped through Grafana Alloy into Loki. Everything else is dropped before it becomes noise.</p>
+      </div>
+      <div class="feature">
+        <h3>Observability<span class="tag">instrumentation</span></h3>
+        <p>Every agent run is traced with Grafana's agent-observability SDK, so the tool that investigates cluster health shows up in the same dashboards as the cluster it's investigating.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="alt" id="architecture">
+  <div class="wrap-wide">
+    <h2>Architecture</h2>
+    <p class="section-intro">Rides entirely on an existing EKS cluster's Prometheus and Alertmanager — no parallel cluster, no second Grafana.</p>
+    <div class="diagram">
+      <svg viewBox="0 0 920 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Architecture diagram: EKS audit logs flow through Alloy to Loki to Grafana; Prometheus and Alertmanager route CrashLoopBackOff alerts to the agent, which queries Loki, Prometheus and the Kubernetes API and writes a report.">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#5C6C88"/>
+          </marker>
+        </defs>
+        <style>
+          .box{fill:#121B2E; stroke:#233149; stroke-width:1.2; rx:6;}
+          .box-hi{fill:#16233B; stroke:#35D0BA; stroke-width:1.4; rx:6;}
+          .lbl{font-family:'IBM Plex Mono',monospace; font-size:11.5px; fill:#E4EAF2;}
+          .lbl-sm{font-family:'IBM Plex Mono',monospace; font-size:10px; fill:#8C99B2;}
+          .edge{stroke:#5C6C88; stroke-width:1.2; fill:none; marker-end:url(#arrow);}
+        </style>
+
+        <!-- top row: audit path -->
+        <rect x="20" y="20" width="140" height="46" class="box"/>
+        <text x="90" y="48" text-anchor="middle" class="lbl">EKS audit logs</text>
+
+        <rect x="210" y="20" width="120" height="46" class="box"/>
+        <text x="270" y="48" text-anchor="middle" class="lbl">Alloy</text>
+
+        <rect x="380" y="20" width="120" height="46" class="box"/>
+        <text x="440" y="48" text-anchor="middle" class="lbl">Loki</text>
+
+        <rect x="550" y="20" width="140" height="46" class="box"/>
+        <text x="620" y="48" text-anchor="middle" class="lbl">Grafana</text>
+
+        <path class="edge" d="M160,43 H210"/>
+        <path class="edge" d="M330,43 H380"/>
+        <path class="edge" d="M500,43 H550"/>
+
+        <!-- middle row: existing stack -->
+        <rect x="20" y="120" width="140" height="46" class="box"/>
+        <text x="90" y="148" text-anchor="middle" class="lbl">Prometheus</text>
+        <text x="90" y="160" text-anchor="middle" class="lbl-sm">existing</text>
+
+        <rect x="210" y="120" width="140" height="46" class="box"/>
+        <text x="280" y="148" text-anchor="middle" class="lbl">Alertmanager</text>
+        <text x="280" y="160" text-anchor="middle" class="lbl-sm">existing</text>
+
+        <path class="edge" d="M160,143 H210"/>
+
+        <!-- agent -->
+        <rect x="410" y="105" width="180" height="76" class="box-hi"/>
+        <text x="500" y="138" text-anchor="middle" class="lbl">aiops-agent</text>
+        <text x="500" y="153" text-anchor="middle" class="lbl-sm">Investigator → Reporter</text>
+        <text x="500" y="167" text-anchor="middle" class="lbl-sm">(LangGraph, read-only)</text>
+
+        <path class="edge" d="M350,143 H410"/>
+        <text x="380" y="132" text-anchor="middle" class="lbl-sm">webhook</text>
+
+        <!-- data sources agent queries -->
+        <path class="edge" d="M440,66 V105"/>
+        <path class="edge" d="M90,166 V220"/>
+
+        <rect x="20" y="220" width="140" height="46" class="box"/>
+        <text x="90" y="248" text-anchor="middle" class="lbl">Kubernetes API</text>
+        <text x="90" y="260" text-anchor="middle" class="lbl-sm">get / list / watch only</text>
+
+        <path class="edge" d="M160,243 H410" />
+
+        <!-- output -->
+        <rect x="650" y="120" width="150" height="46" class="box"/>
+        <text x="725" y="148" text-anchor="middle" class="lbl">Markdown report</text>
+
+        <path class="edge" d="M590,143 H650"/>
+
+        <!-- observability -->
+        <rect x="650" y="20" width="150" height="46" class="box" stroke-dasharray="4 3"/>
+        <text x="725" y="43" text-anchor="middle" class="lbl-sm">agento11y traces</text>
+        <text x="725" y="55" text-anchor="middle" class="lbl-sm">→ Grafana</text>
+        <path class="edge" d="M500,105 V66 Q500,20 650,43" stroke-dasharray="4 3"/>
+      </svg>
+    </div>
+    <p class="diagram-caption">Solid lines: data and alert flow. Dashed line: the agent's own instrumentation, feeding back into the same Grafana.</p>
+  </div>
+</section>
+
+<section id="safety">
+  <div class="wrap">
+    <h2>Read-only, enforced twice</h2>
+    <p class="section-intro">"Don't take actions" isn't a line in a prompt here — a prompt is advisory. It's a property of the code and the cluster permissions, independently.</p>
+    <div class="layers">
+      <div class="layer-card">
+        <h4>Layer 1 — the code itself</h4>
+        <p>The tool clients the agent calls simply don't contain a write method. There's no <code>delete_pod</code> or <code>patch_deployment</code> function anywhere for a bug — or a misbehaving prompt — to reach for.</p>
+      </div>
+      <div class="layer-card b">
+        <h4>Layer 2 — cluster RBAC</h4>
+        <p>The agent's service account is granted <code>get</code>, <code>list</code>, <code>watch</code> — nothing else. Even if the code layer had a bug, the API server itself would reject any write attempt.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="alt" id="demo">
+  <div class="wrap-wide">
+    <h2>See it in action</h2>
+    <p class="section-intro">Media from a real run against a live cluster goes here.</p>
+    <div class="media-grid">
+      <div class="placeholder">
+        <span class="ph-label">PLACEHOLDER — screenshot</span>
+        Grafana security-audit dashboard, showing a real <code>kubectl exec</code> event and an RBAC change captured within seconds.
+      </div>
+      <div class="placeholder">
+        <span class="ph-label">PLACEHOLDER — screenshot</span>
+        A generated incident report: the alert that fired next to the agent's Markdown summary.
+      </div>
+      <div class="placeholder">
+        <span class="ph-label">PLACEHOLDER — screen recording</span>
+        30–60s clip: triggering the CrashLoopBackOff pod, the alert firing, the report appearing.
+      </div>
+      <div class="placeholder">
+        <span class="ph-label">PLACEHOLDER — screenshot</span>
+        Grafana's AI Observability view, showing a real agent run's latency and node breakdown.
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Deliberately out of scope</h2>
+    <p class="section-intro">A working two-node agent beats an elaborate multi-agent system nobody, including its builder, can fully explain.</p>
+    <ul class="nongoals">
+      <li>No multi-agent "war room" with specialized roles for every alert type.</li>
+      <li>No autonomous remediation — investigation only, a human decides and acts.</li>
+      <li>No parallel cluster — this rides entirely on existing infrastructure.</li>
+    </ul>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="wrap">
+    <h2>Built with</h2>
+    <div class="stack">
+      <span>LangGraph</span><span>FastAPI</span><span>Ollama</span><span>Kubernetes API</span>
+      <span>Grafana Alloy</span><span>Loki</span><span>Prometheus</span><span>Alertmanager</span>
+      <span>Grafana agento11y</span><span>Argo CD</span><span>Amazon EKS</span>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap-wide">
+    <p>Amin Amini — DevOps &amp; Platform Engineer</p>
+    <div class="links">
+      <a href="https://github.com/4Min4m/eks-aiops-agent-security-audit">GitHub repo</a>
+      <a href="mailto:m.a.amini2011@gmail.com">Email</a>
+      <a href="#top">Back to top</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // Single orchestrated moment: the hero terminal "runs" once on load.
+  const lines = [
+    { t: '$ kubectl get pods -n httpbin', cls: '' },
+    { t: 'crashy-demo-7f8b9c   0/1   CrashLoopBackOff   6   14m', cls: 'c-muted' },
+    { t: '', cls: '' },
+    { t: '[alertmanager] PodCrashLoopBackOff → webhook fired', cls: 'c-amber' },
+    { t: '', cls: '' },
+    { t: '› investigator: querying Loki, Prometheus, K8s API…', cls: 'c-teal' },
+    { t: '› reporter: drafting summary…', cls: 'c-teal' },
+    { t: '', cls: '' },
+    { t: '## Likely cause', cls: '' },
+    { t: 'Container exits immediately on start — missing', cls: 'c-muted' },
+    { t: 'config file referenced at startup (see logs).', cls: 'c-muted' },
+    { t: '', cls: '' },
+    { t: '## Suggested next step', cls: '' },
+    { t: 'Check the ConfigMap mounted at /etc/crashy —', cls: 'c-muted' },
+    { t: 'read-only diagnostic, no action taken.', cls: 'c-muted' },
+    { t: '', cls: '' },
+    { t: '✓ report written to incident-reports/', cls: 'c-teal' },
+  ];
+  const out = document.getElementById('term-out');
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function render(instant){
+    out.innerHTML = '';
+    lines.forEach(l => {
+      const span = document.createElement('div');
+      if (l.cls) span.className = l.cls;
+      span.textContent = l.t || '\u00A0';
+      out.appendChild(span);
+    });
+    const cur = document.createElement('span');
+    cur.className = 'cursor';
+    out.appendChild(cur);
+  }
+
+  if (reduced) {
+    render(true);
+  } else {
+    let i = 0;
+    const step = () => {
+      if (i >= lines.length) return;
+      const div = document.createElement('div');
+      if (lines[i].cls) div.className = lines[i].cls;
+      div.textContent = lines[i].t || '\u00A0';
+      out.appendChild(div);
+      i++;
+      setTimeout(step, 220);
+    };
+    step();
+    const cur = document.createElement('span');
+    cur.className = 'cursor';
+    setTimeout(() => out.appendChild(cur), lines.length * 220);
+  }
+</script>
+
+</body>
+</html>
