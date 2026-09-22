@@ -1,0 +1,62 @@
+# Loki, deployed into the SAME `monitoring` namespace as Project 1's
+# kube-prometheus-stack — deliberately reusing that Grafana instance rather
+# than standing up a second one.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: loki
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: eks-httpbin-alb
+  source:
+    repoURL: https://grafana.github.io/helm-charts
+    chart: loki
+    targetRevision: "6.16.0" # EXAMPLE — verify & pin with `helm search repo grafana/loki --versions`
+    helm:
+      values: |
+        deploymentMode: SingleBinary
+        loki:
+          auth_enabled: false
+          commonConfig:
+            replication_factor: 1
+          storage:
+            type: filesystem
+          schemaConfig:
+            configs:
+              - from: "2024-01-01"
+                store: tsdb
+                object_store: filesystem
+                schema: v13
+                index:
+                  prefix: loki_index_
+                  period: 24h
+        singleBinary:
+          replicas: 1
+          persistence:
+            enabled: true
+            storageClass: gp3
+            size: 10Gi
+        # This is a demo-scale, filesystem-backed single binary — explicitly
+        # not the HA/S3-backed deployment you'd run in production. Calling
+        # that out here and in the README so it doesn't read as an oversight.
+        gateway:
+          enabled: true
+        monitoring:
+          selfMonitoring:
+            enabled: false
+          lokiCanary:
+            enabled: false
+        test:
+          enabled: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
