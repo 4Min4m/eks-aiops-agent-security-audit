@@ -1,0 +1,66 @@
+# Kubernetes audit policy — scoped on purpose.
+#
+# Goal per the plan: "confirm audit logging is enabled and scoped to
+# something meaningful, not the full firehose." A default `Metadata`-level
+# policy over every resource produces enormous log volume and buries the two
+# signals we actually care about. This policy:
+#   1. Logs RBAC object writes at RequestResponse level (need the actual
+#      diff — who got which permission).
+#   2. Logs `pods/exec` (and `pods/attach`) create calls at RequestResponse
+#      level (need to know exactly which pod, which container, which user).
+#   3. Drops everything else at a low level (Metadata for a short allow-list
+#      of security-relevant verbs, otherwise None) so Loki isn't drowned in
+#      routine GET/LIST noise.
+#
+# EKS-specific note: on EKS you cannot edit the control-plane
+# kube-apiserver flags directly (control plane is managed). Audit logging is
+# enabled instead via the "Amazon EKS control plane logging" API/console
+# toggle (audit log type), which ships control-plane audit events to
+# CloudWatch Logs. This policy file is what you'd hand to a self-managed
+# apiserver via --audit-policy-file; for EKS, treat it as the *filter you
+# apply when reading events out of CloudWatch* (either via CloudWatch
+# subscription filter, or by having Alloy's AWS CloudWatch Logs component
+# poll the EKS audit log group and drop events that don't match these
+# categories before forwarding to Loki). See security-audit/README.md for
+# the concrete EKS wiring — this file documents *intent*, not a flag EKS
+# lets you pass directly.
+apiVersion: audit.k8s.io/v1
+kind: Policy
+omitStages:
+  - "RequestReceived"
+rules:
+  # 1. RBAC changes: full request+response so we can see exactly what
+  # permissions were granted/revoked, by whom.
+  - level: RequestResponse
+    verbs: ["create", "update", "patch", "delete"]
+    resources:
+      - group: "rbac.authorization.k8s.io"
+        resources: ["roles", "rolebindings", "clusterroles", "clusterrolebindings"]
+
+  # 2. Interactive access into a running pod: exec and attach. This is the
+  # single highest-signal "someone is inside a container right now" event.
+  - level: RequestResponse
+    verbs: ["create"]
+    resources:
+      - group: ""
+        resources: ["pods/exec", "pods/attach"]
+
+  # 3. Everything else: keep a thin metadata trail for a few other
+  # security-relevant verbs (useful context, cheap to store), drop the rest.
+  - level: Metadata
+    verbs: ["delete"]
+    resources:
+      - group: ""
+        resources: ["secrets", "serviceaccounts"]
+
+  - level: None
+    users: ["system:kube-scheduler", "system:kube-controller-manager"]
+
+  - level: None
+    resources:
+      - group: ""
+        resources: ["events"]
+
+  # Default for everything not matched above: don't log it. This is what
+  # keeps the pipeline scoped instead of a full firehose.
+  - level: None
