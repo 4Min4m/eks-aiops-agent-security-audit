@@ -1,0 +1,69 @@
+// Grafana Alloy config (River syntax) — Phase 1 of the AIOps project.
+//
+// EKS control-plane audit logs land in CloudWatch Logs (log group
+// "/aws/eks/<cluster-name>/cluster", log stream prefix "kube-apiserver-audit-")
+// once you enable "audit" as a control-plane log type on the cluster (this
+// is an EKS API/console setting — aws eks update-cluster-config
+// --logging '{"clusterLogging":[{"types":["audit"],"enabled":true}]}').
+//
+// Alloy pulls from CloudWatch Logs directly (no extra shipper needed),
+// filters down to the two event categories the audit-policy.yaml above is
+// designed to surface, and forwards structured entries to Loki.
+
+logging {
+  level = "info"
+}
+
+// --- Source: EKS control-plane audit log group in CloudWatch -------------
+loki.source.awsfirehose "eks_audit" {
+  // If you're not using the Firehose delivery path, use
+  // loki.source.cloudwatch instead — kept here as the simpler starting
+  // point for a demo cluster. See security-audit/README.md for the
+  // CloudWatch-poll variant and IAM permissions required either way.
+  http {
+    listen_address = "0.0.0.0"
+    listen_port     = 9880
+  }
+  forward_to = [loki.process.filter_audit_events.receiver]
+}
+
+// --- Filter: keep only RBAC-change and pods/exec events -------------------
+// Belt-and-suspenders with the audit-policy.yaml scoping: even if a wider
+// log stream is polled, only forward the two event types this project
+// alerts on and dashboards.
+loki.process "filter_audit_events" {
+  stage.json {
+    expressions = {
+      verb           = "verb",
+      object_ref_res = "objectRef.resource",
+      user           = "user.username",
+      subresource    = "objectRef.subresource",
+    }
+  }
+
+  stage.label_keep {
+    values = ["verb", "object_ref_res", "user", "subresource"]
+  }
+
+  // Drop anything that isn't an RBAC object write or a pods/exec|attach call.
+  stage.drop {
+    source = "object_ref_res"
+    expression = "^(?!roles$|rolebindings$|clusterroles$|clusterrolebindings$|pods$).*$"
+  }
+
+  forward_to = [loki.write.default.receiver]
+}
+
+// --- Sink: existing Grafana / Loki stack from Project 1 -------------------
+loki.write "default" {
+  endpoint {
+    // Reuses the Loki instance deployed alongside Project 1's
+    // kube-prometheus-stack Grafana (see security-audit/gitops/loki.yaml) —
+    // deliberately not standing up a second Grafana per the plan.
+    url = "http://loki-gateway.monitoring.svc.cluster.local/loki/api/v1/push"
+  }
+  external_labels = {
+    cluster = "eks-httpbin-alb",
+    source  = "k8s-audit",
+  }
+}
