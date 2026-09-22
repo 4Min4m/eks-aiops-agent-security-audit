@@ -1,0 +1,72 @@
+{
+  "title": "K8s Security Audit (RBAC + Exec)",
+  "uid": "k8s-security-audit",
+  "tags": ["security", "audit", "k8s"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "panels": [
+    {
+      "id": 1,
+      "title": "RBAC changes (role/rolebinding create|update|delete)",
+      "type": "logs",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 0 },
+      "datasource": { "type": "loki", "uid": "${loki_datasource}" },
+      "targets": [
+        {
+          "expr": "{source=\"k8s-audit\", object_ref_res=~\"roles|rolebindings|clusterroles|clusterrolebindings\"}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "RBAC changes over time",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 10 },
+      "datasource": { "type": "loki", "uid": "${loki_datasource}" },
+      "targets": [
+        {
+          "expr": "sum(count_over_time({source=\"k8s-audit\", object_ref_res=~\"roles|rolebindings|clusterroles|clusterrolebindings\"}[5m]))",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "kubectl exec / attach events",
+      "type": "logs",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 18 },
+      "datasource": { "type": "loki", "uid": "${loki_datasource}" },
+      "targets": [
+        {
+          "expr": "{source=\"k8s-audit\", object_ref_res=\"pods\", subresource=~\"exec|attach\"}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Exec/attach events over time",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 10 },
+      "datasource": { "type": "loki", "uid": "${loki_datasource}" },
+      "targets": [
+        {
+          "expr": "sum(count_over_time({source=\"k8s-audit\", object_ref_res=\"pods\", subresource=~\"exec|attach\"}[1m]))",
+          "refId": "A"
+        }
+      ]
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "loki_datasource",
+        "type": "datasource",
+        "query": "loki",
+        "current": {}
+      }
+    ]
+  }
+}
