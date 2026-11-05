@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ..llm import get_llm
-from ..observability import trace_node
+from ..observability import llm_run_config
 from ..state import InvestigationState
 
 _REPORT_DIR = os.environ.get("REPORT_OUTPUT_DIR", "./incident-reports")
@@ -64,19 +64,21 @@ Alert description: {alert['description']}
 
 def report(state: InvestigationState) -> InvestigationState:
     llm = get_llm()
+    alert = state["alert"]
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
-    with trace_node("reporter"):
-        response = llm.invoke(
-            [
-                ("system", _SYSTEM_PROMPT),
-                ("human", _build_user_prompt(state)),
-            ]
-        )
+    response = llm.invoke(
+        [
+            ("system", _SYSTEM_PROMPT),
+            ("human", _build_user_prompt(state)),
+        ],
+        config=llm_run_config("reporter", conversation_id=f"{alert['pod']}-{timestamp}"),
+    )
     summary_markdown = response.content
 
     Path(_REPORT_DIR).mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    alert = state["alert"]
+    # alertname/pod are validated as DNS-1123 names in main.py, so they are
+    # safe to use as path components (no "/" or "..").
     filename = f"{timestamp}_{alert['alertname']}_{alert['pod']}.md"
     report_path = str(Path(_REPORT_DIR) / filename)
 
