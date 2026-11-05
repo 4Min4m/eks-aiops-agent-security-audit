@@ -9,7 +9,7 @@ can unit-test evidence-gathering without needing a model running at all.
 """
 from __future__ import annotations
 
-from ..observability import trace_node
+from ..observability import trace_tool
 from ..state import InvestigationState
 from ..tools.kubectl_client import describe_pod
 from ..tools.loki_client import query_recent_pod_logs
@@ -21,11 +21,13 @@ def investigate(state: InvestigationState) -> InvestigationState:
     namespace = alert["namespace"]
     pod = alert["pod"]
 
-    with trace_node("investigator"):
-        evidence = {
-            "recent_logs": query_recent_pod_logs(namespace, pod),
-            "restart_count_series": query_restart_count(namespace, pod),
-            "describe_output": describe_pod(namespace, pod),
-        }
+    args = {"namespace": namespace, "pod": pod}
+    evidence = {}
+    with trace_tool("loki_recent_pod_logs", args):
+        evidence["recent_logs"] = query_recent_pod_logs(namespace, pod)
+    with trace_tool("prometheus_restart_count", args):
+        evidence["restart_count_series"] = query_restart_count(namespace, pod)
+    with trace_tool("k8s_describe_pod", args):
+        evidence["describe_output"] = describe_pod(namespace, pod)
 
     return {**state, "evidence": evidence}
