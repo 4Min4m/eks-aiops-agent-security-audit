@@ -1,10 +1,9 @@
 """Thin wrapper around the local Ollama model.
 
-Chosen per Amin's call: local model (Ollama), no paid API key. This means
-Phase 3's agento11y instrumentation won't have a $-cost dimension to show —
-that's worth stating plainly in the demo/README rather than glossing over,
-since "cost tracking" is one of the three things agento11y advertises
-(generations, latency, cost) and only two of the three apply here.
+Design choice: a local model (Ollama), no paid API key. This means the
+agento11y instrumentation has no $-cost dimension to show — only
+generations and latency apply here, and that's stated plainly rather than
+glossed over.
 """
 from __future__ import annotations
 
