@@ -1,0 +1,113 @@
+# In-cluster Ollama serving the local model the Reporter node calls
+# (OLLAMA_BASE_URL in deployment.yaml points at this Service).
+#
+# Sizing: llama3.1:8b (Q4) needs ~5-6 GiB of RAM to load; CPU inference is
+# slow (tens of seconds per report) but fine for a demo. Schedule this onto
+# a node with enough memory, or swap OLLAMA_MODEL for a smaller model
+# (e.g. llama3.2:3b) on small node groups.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ollama
+  namespace: aiops-agent
+  labels:
+    app: ollama
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # single RWO volume
+  selector:
+    matchLabels:
+      app: ollama
+  template:
+    metadata:
+      labels:
+        app: ollama
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      initContainers:
+        # Pull the model once into the persistent volume so the first alert
+        # doesn't wait on a multi-GB download.
+        - name: pull-model
+          image: ollama/ollama:0.6.8
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              ollama serve & pid=$!
+              until ollama list >/dev/null 2>&1; do sleep 1; done
+              ollama pull "$OLLAMA_MODEL"
+              kill $pid
+          env:
+            - name: OLLAMA_MODEL
+              value: "llama3.1:8b" # keep in sync with aiops-agent-config
+            - name: HOME
+              value: /home/ollama
+            - name: OLLAMA_MODELS
+              value: /models
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+          volumeMounts:
+            - { name: models, mountPath: /models }
+            - { name: home, mountPath: /home/ollama }
+      containers:
+        - name: ollama
+          image: ollama/ollama:0.6.8
+          ports:
+            - containerPort: 11434
+          env:
+            - name: HOME
+              value: /home/ollama
+            - name: OLLAMA_MODELS
+              value: /models
+            - name: OLLAMA_HOST
+              value: "0.0.0.0:11434"
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+          readinessProbe:
+            httpGet: { path: /, port: 11434 }
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "1"
+              memory: 6Gi
+            limits:
+              memory: 8Gi
+          volumeMounts:
+            - { name: models, mountPath: /models }
+            - { name: home, mountPath: /home/ollama }
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: ollama-models
+        - name: home
+          emptyDir: {}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ollama-models
+  namespace: aiops-agent
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: gp3
+  resources:
+    requests:
+      storage: 15Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama
+  namespace: aiops-agent
+spec:
+  selector:
+    app: ollama
+  ports:
+    - port: 11434
+      targetPort: 11434
