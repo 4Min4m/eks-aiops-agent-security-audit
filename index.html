@@ -139,8 +139,14 @@
   .placeholder{
     border:1px dashed #3A4C6B; border-radius:8px; background:#0E1729;
     padding:40px 20px; text-align:center; color:var(--text-muted); font-size:14px;
+    display:flex; flex-direction:column; justify-content:center;
   }
   .placeholder .ph-label{font-family:var(--mono); color:var(--amber); font-size:12.5px; display:block; margin-bottom:8px;}
+  .shot{margin:0; border:1px solid var(--panel-border); border-radius:8px; overflow:hidden; background:var(--panel);}
+  .shot a{display:block;}
+  .shot img{display:block; width:100%; height:auto;}
+  .shot figcaption{padding:12px 14px; font-size:13.5px; color:var(--text-muted); border-top:1px solid var(--panel-border);}
+  .shot figcaption .ph-label{font-family:var(--mono); color:var(--amber); font-size:12px; display:block; margin-bottom:4px;}
   .media-grid{display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-top:8px;}
   @media (max-width:700px){ .media-grid{grid-template-columns:1fr;} }
 
@@ -331,24 +337,24 @@
 <section class="alt" id="demo">
   <div class="wrap-wide">
     <h2>See it in action</h2>
-    <p class="section-intro">Media from a real run against a live cluster goes here.</p>
+    <p class="section-intro">Illustrative mock-ups of what each piece produces, built from the repo's actual dashboard queries, report format and demo scenario. Captures from a live run will replace them.</p>
     <div class="media-grid">
-      <div class="placeholder">
-        <span class="ph-label">PLACEHOLDER — screenshot</span>
-        Grafana security-audit dashboard, showing a real <code>kubectl exec</code> event and an RBAC change captured within seconds.
-      </div>
-      <div class="placeholder">
-        <span class="ph-label">PLACEHOLDER — screenshot</span>
-        A generated incident report: the alert that fired next to the agent's Markdown summary.
-      </div>
+      <figure class="shot">
+        <a href="assets/security-audit-dashboard.png"><img src="assets/security-audit-dashboard.png" width="1280" height="800" loading="lazy" alt="Security-audit dashboard with RBAC change log lines, RBAC and exec rate charts, and kubectl exec/attach events from the httpbin namespace."></a>
+        <figcaption><span class="ph-label">Illustrative mock-up</span>Security-audit dashboard: a <code>kubectl exec</code> event and an RBAC change, each with the user and target pod or binding.</figcaption>
+      </figure>
+      <figure class="shot">
+        <a href="assets/incident-report.png"><img src="assets/incident-report.png" width="1280" height="800" loading="lazy" alt="A firing PodCrashLoopBackOff alert next to the agent's Markdown report: likely cause, cited evidence, and one read-only next diagnostic step."></a>
+        <figcaption><span class="ph-label">Illustrative mock-up</span>The alert that fired next to the agent's generated report: likely cause, cited evidence, one read-only next step.</figcaption>
+      </figure>
       <div class="placeholder">
         <span class="ph-label">PLACEHOLDER — screen recording</span>
         30–60s clip: triggering the CrashLoopBackOff pod, the alert firing, the report appearing.
       </div>
-      <div class="placeholder">
-        <span class="ph-label">PLACEHOLDER — screenshot</span>
-        Grafana's AI Observability view, showing a real agent run's latency and node breakdown.
-      </div>
+      <figure class="shot">
+        <a href="assets/agent-observability.png"><img src="assets/agent-observability.png" width="1280" height="800" loading="lazy" alt="Agent observability view: one run's waterfall showing three fast evidence queries and a 14.9 second LLM generation, plus per-step latency and recent generations."></a>
+        <figcaption><span class="ph-label">Illustrative mock-up</span>Agent observability: one run's breakdown. Evidence queries take milliseconds; the local LLM call dominates.</figcaption>
+      </figure>
     </div>
   </div>
 </section>
