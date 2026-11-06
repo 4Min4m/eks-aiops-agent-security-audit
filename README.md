@@ -41,7 +41,7 @@ flowchart LR
     end
 
     subgraph phase1["Phase 1 — Security Audit"]
-        cw["EKS audit logs\n(CloudWatch)"]
+        cw["EKS audit logs\n(CloudWatch → Firehose)"]
         alloy["Grafana Alloy"]
         loki["Loki"]
     end
@@ -70,8 +70,7 @@ flowchart LR
 Chosen scenario: **a pod goes CrashLoopBackOff** in the `httpbin` namespace
 (`incident-scenario/broken-deployment.yaml` deploys an intentionally
 broken demo pod so this is trigger-on-demand, not something you have to
-wait for or fake). Kept to this one scenario deliberately — see Phase 0 in
-`PLAN-project4-aiops.md`.
+wait for or fake). Kept to this one scenario deliberately.
 
 ## Output (Phase 2.3)
 
@@ -86,9 +85,10 @@ workspace.)
 
 ```
 security-audit/     Phase 1 — audit policy, Alloy config, Loki, dashboards, alerts
+                    (kustomization.yaml renders the Alloy ConfigMap + ruler rules)
 incident-scenario/  Phase 0 — the chosen CrashLoopBackOff demo + its PrometheusRule
 alertmanager/       Webhook receiver wiring (AlertmanagerConfig CRD)
-agent/              Phase 2/3 — the LangGraph agent, its k8s manifests, its GitOps app
+agent/              Phase 2/3 — the LangGraph agent, Ollama, k8s manifests, GitOps app
 ```
 
 ## Verification status
@@ -98,8 +98,7 @@ alert.** Same posture as Project 1's later phases: this was authored as a
 complete, internally consistent design without access to a live AWS
 account/network, so treat it like a thorough PR from a colleague — read it,
 run it, expect small first-contact fixes (a chart values field renamed
-between versions, an RBAC verb you need to add). That debugging is itself
-covered as an exercise in the study guide, not glossed over. The
+between versions, an RBAC verb you need to add). The
 per-phase checkpoints (a real dashboard screenshot, a real captured
 investigation) are yours to produce by actually running this against your
 EKS cluster — see each phase's own README for the concrete steps.
