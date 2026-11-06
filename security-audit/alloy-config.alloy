@@ -6,8 +6,7 @@
 // is an EKS API/console setting — aws eks update-cluster-config
 // --logging '{"clusterLogging":[{"types":["audit"],"enabled":true}]}').
 //
-// Alloy pulls from CloudWatch Logs directly (no extra shipper needed),
-// filters down to the two event categories the audit-policy.yaml above is
+// Alloy receives them via a Firehose HTTP endpoint, filters down to the two event categories the audit-policy.yaml above is
 // designed to surface, and forwards structured entries to Loki.
 
 logging {
@@ -15,11 +14,16 @@ logging {
 }
 
 // --- Source: EKS control-plane audit log group in CloudWatch -------------
+// Delivery path: CloudWatch Logs subscription filter on the audit log group
+// -> Kinesis Data Firehose (HTTP endpoint destination) -> this receiver.
+// loki.source.awsfirehose decodes the CloudWatch-subscription record format,
+// so each audit event arrives as one JSON log line. See
+// security-audit/README.md for the AWS-side setup.
 loki.source.awsfirehose "eks_audit" {
-  // If you're not using the Firehose delivery path, use
-  // loki.source.cloudwatch instead — kept here as the simpler starting
-  // point for a demo cluster. See security-audit/README.md for the
-  // CloudWatch-poll variant and IAM permissions required either way.
+  // Firehose sends this key in X-Amz-Firehose-Access-Key; requests without
+  // it are rejected. Provided via env from a Secret (see gitops/alloy.yaml).
+  access_key = sys.env("FIREHOSE_ACCESS_KEY")
+
   http {
     listen_address = "0.0.0.0"
     listen_port     = 9880
@@ -27,28 +31,58 @@ loki.source.awsfirehose "eks_audit" {
   forward_to = [loki.process.filter_audit_events.receiver]
 }
 
-// --- Filter: keep only RBAC-change and pods/exec events -------------------
-// Belt-and-suspenders with the audit-policy.yaml scoping: even if a wider
-// log stream is polled, only forward the two event types this project
-// alerts on and dashboards.
+// --- Filter: keep only RBAC writes and pods/exec|attach -----------------
+// EKS ships *every* audit event to CloudWatch (the audit-policy.yaml in this
+// folder can't be handed to the managed apiserver), so this stage is what
+// actually implements that policy.
+//
+// Note: Alloy regexes are Go RE2 — no lookahead/negation — so "keep only X"
+// is expressed as: build a key, promote it to a temporary label, and drop
+// lines whose key does NOT match (`!~` in a stage.match selector).
 loki.process "filter_audit_events" {
   stage.json {
     expressions = {
       verb           = "verb",
       object_ref_res = "objectRef.resource",
-      user           = "user.username",
       subresource    = "objectRef.subresource",
     }
   }
 
-  stage.label_keep {
-    values = ["verb", "object_ref_res", "user", "subresource"]
+  // "<resource>/<subresource>/<verb>", e.g. "rolebindings//create" or
+  // "pods/exec/create". Missing fields render as "<no value>".
+  stage.template {
+    source   = "audit_key"
+    template = "{{ .object_ref_res }}/{{ .subresource }}/{{ .verb }}"
   }
 
-  // Drop anything that isn't an RBAC object write or a pods/exec|attach call.
-  stage.drop {
-    source = "object_ref_res"
-    expression = "^(?!roles$|rolebindings$|clusterroles$|clusterrolebindings$|pods$).*$"
+  stage.static_labels {
+    values = { pipeline = "k8s-audit" }
+  }
+
+  stage.labels {
+    values = { audit_key = "" }
+  }
+
+  stage.match {
+    // exec/attach: any verb (kubectl >= 1.30 uses WebSockets, which can be
+    // audited as "get" rather than "create").
+    selector            = "{pipeline=\"k8s-audit\", audit_key!~\"(roles|rolebindings|clusterroles|clusterrolebindings)/[^/]*/(create|update|patch|delete)|pods/(exec|attach)/.*\"}"
+    action              = "drop"
+    drop_counter_reason = "not_security_relevant"
+  }
+
+  // Low-cardinality labels the alerts and dashboard select on. The username
+  // stays in the JSON log line (query it with `| json`), not as a label.
+  stage.labels {
+    values = {
+      verb           = "",
+      object_ref_res = "",
+      subresource    = "",
+    }
+  }
+
+  stage.label_drop {
+    values = ["audit_key", "pipeline"]
   }
 
   forward_to = [loki.write.default.receiver]
