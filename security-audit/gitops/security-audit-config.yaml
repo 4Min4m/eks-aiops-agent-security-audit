@@ -1,0 +1,23 @@
+# Argo CD Application for the repo-owned pieces of the audit pipeline:
+# the Alloy config ConfigMap (generated from alloy-config.alloy) and the
+# Loki ruler alert rules. See security-audit/kustomization.yaml.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: security-audit-config
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: eks-httpbin-alb
+  source:
+    repoURL: https://github.com/4Min4m/eks-aiops-agent-security-audit.git
+    targetRevision: main
+    path: security-audit
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
