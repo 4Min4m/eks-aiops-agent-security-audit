@@ -5,3 +5,4 @@ resources:
   - serviceaccount-rbac.yaml
   - deployment.yaml
   - service.yaml
+  - ollama.yaml
