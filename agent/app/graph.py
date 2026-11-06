@@ -1,8 +1,8 @@
 """The whole graph, in one file, because it's genuinely small: two nodes,
 one edge. If this file ever grows past ~30 lines of actual graph-building
 code, that's a signal you've drifted back toward the "multi-agent war room"
-scope this project explicitly avoids — see PLAN-project4-aiops.md's
-"Explicit non-goals" section.
+scope this project explicitly avoids — see the "Explicit non-goals"
+section of the top-level README.
 """
 from __future__ import annotations
 
