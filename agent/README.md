@@ -20,7 +20,7 @@ Here's the path that needs zero local installs:
    `httpbin` namespace with `incident-scenario/broken-deployment.yaml` to
    get a real CrashLoopBackOff pod to query against.
 3. Run the agent itself directly with `uvicorn`  rather than building the Docker image yet — faster
-   iteration: `pip install -r requirements.txt && uvicorn app.main:app --reload`.
+   iteration: `pip install -r requirements.txt && uvicorn app.main:app --reload --port 8080`.
 4. `curl` a synthetic Alertmanager payload at `/webhook/alertmanager` (see
    below) to trigger a run without needing Alertmanager itself running.
 
@@ -45,5 +45,4 @@ Alertmanager Service DNS names — no code changes.
 Code-complete, not yet run against a live cluster or a real fired alert.
 The Phase 2 checkpoint (a real captured alert + the agent's resulting
 summary, saved permanently) still needs you to actually trigger the
-scenario once — see `docs/incidents/EXAMPLE-RUN-TEMPLATE.md` for where
-that goes when you do.
+scenario once and commit the resulting report.
