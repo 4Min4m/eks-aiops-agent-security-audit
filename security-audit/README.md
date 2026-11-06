@@ -8,9 +8,11 @@ Rides on Project 1's existing EKS cluster and `monitoring` namespace
 | File | Purpose |
 | --- | --- |
 | `audit-policy.yaml` | Intent-level audit policy: RBAC writes + `pods/exec`/`attach` at full detail, everything else dropped or thin. See in-file comment on the EKS control-plane caveat. |
-| `alloy-config.alloy` | Alloy pipeline: pull EKS audit events from CloudWatch, filter to the two categories, push to Loki. |
-| `gitops/loki.yaml` | Argo CD Application — Loki, single-binary, filesystem-backed, into `monitoring`. |
-| `gitops/alloy.yaml` | Argo CD Application — Alloy, one replica, IRSA-scoped to read the audit log group only. |
+| `alloy-config.alloy` | Alloy pipeline: receive EKS audit events via Firehose, filter to the two categories, push to Loki. |
+| `kustomization.yaml` | Renders `alloy-config.alloy` into the `alloy-audit-config` ConfigMap and ships the ruler alert rules. |
+| `gitops/security-audit-config.yaml` | Argo CD Application for the kustomization above. |
+| `gitops/loki.yaml` | Argo CD Application — Loki, single-binary, filesystem-backed, into `monitoring`, ruler wired to Alertmanager. |
+| `gitops/alloy.yaml` | Argo CD Application — Alloy, one replica, loads the `alloy-audit-config` ConfigMap. |
 | `alerts/security-audit-rules.yaml` | Loki ruler alerts: `RBACRoleOrBindingChanged`, `PodExecOrAttach`. Fire to the existing Alertmanager. |
 | `dashboards/k8s-security-audit-dashboard.json` | Two log panels + two rate panels, import into the existing Grafana. |
 
@@ -35,10 +37,25 @@ that drops everything except RBAC writes and pod exec/attach — treat the
 policy YAML as the spec Alloy's filter stage implements, not something you
 hand to the apiserver directly.
 
-IAM: the Alloy service account (IRSA) needs read-only
-`logs:FilterLogEvents` / `logs:GetLogEvents` scoped to that one log group —
-nothing else. Least privilege, matching how Project 1's IRSA roles are
-scoped elsewhere in this portfolio.
+### Getting events from CloudWatch to Alloy (Firehose)
+
+Alloy's `loki.source.awsfirehose` receiver is push-based, so the AWS side is:
+
+1. A Kinesis Data Firehose stream with an **HTTP endpoint** destination
+   pointing at Alloy's port 9880 (exposed over HTTPS, e.g. via an ALB
+   Ingress — Firehose requires HTTPS) and an **access key**.
+2. A CloudWatch Logs **subscription filter** on `/aws/eks/<cluster>/cluster`
+   (filter pattern can pre-filter to `kube-apiserver-audit` streams) that
+   targets that Firehose stream.
+3. The same access key stored in the cluster, never in git:
+
+```bash
+kubectl -n monitoring create secret generic alloy-firehose-access-key \
+  --from-literal=access-key='<the Firehose access key>'
+```
+
+Alloy itself makes no AWS API calls, so it needs no IRSA role; the
+Firehose → Alloy hop is authenticated by that access key.
 
 ## Verification checkpoint
 
@@ -54,6 +71,5 @@ scoped elsewhere in this portfolio.
 
 Code-complete, not yet run against a live cluster — same verification
 posture as Project 1's Phase 2–4 additions. Expect small first-contact
-fixes (a Helm values field renamed between chart versions, the CloudWatch
-IAM policy needing one more action) — that debugging is itself covered as
-an exercise in the study guide.
+fixes (a Helm values field renamed between chart versions, the Firehose
+endpoint/TLS wiring).
