@@ -1,13 +1,20 @@
-# Patch to kube-prometheus-stack's Alertmanager config (via the
-# `alertmanager.config` Helm value in Project 1's
-# gitops/apps/monitoring.yaml, or an AlertmanagerConfig CRD if you'd rather
-# keep this decoupled from the main Helm values — CRD approach shown below
-# since it doesn't require touching Project 1's existing file).
+# Routes PodCrashLoopBackOff alerts to the agent's webhook, via an
+# AlertmanagerConfig CRD (kept separate from the main kube-prometheus-stack
+# Helm values).
+#
+# IMPORTANT — namespace: the Prometheus Operator's default
+# alertmanagerConfigMatcherStrategy (OnNamespace) silently adds a
+# `namespace="<this object's namespace>"` matcher to every route below. The
+# CrashLoopBackOff alert carries namespace="httpbin" (from kube-state-metrics),
+# so this object must live in `httpbin`; in `monitoring` the route would
+# never match and the agent would never be called. Requires the Alertmanager's
+# alertmanagerConfigNamespaceSelector to include httpbin (the chart default
+# `{}` selects all namespaces).
 apiVersion: monitoring.coreos.com/v1alpha1
 kind: AlertmanagerConfig
 metadata:
   name: aiops-agent-webhook
-  namespace: monitoring
+  namespace: httpbin
   labels:
     # Matches kube-prometheus-stack's default alertmanagerConfigSelector.
     release: kube-prometheus-stack
