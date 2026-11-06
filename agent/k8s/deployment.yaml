@@ -24,6 +24,13 @@ spec:
           image: amin4m/aiops-agent:latest # build from agent/Dockerfile, push to registry
           ports:
             - containerPort: 8080
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            periodSeconds: 20
+            failureThreshold: 6
           envFrom:
             - configMapRef:
                 name: aiops-agent-config
@@ -59,3 +66,7 @@ data:
   TARGET_NAMESPACE: "httpbin"
   REPORT_OUTPUT_DIR: "/app/incident-reports"
   AGENTO11Y_SERVICE_NAME: "aiops-investigator-agent"
+  # Set to your agento11y ingest endpoint to enable Phase 3 instrumentation;
+  # left empty, the agent runs with instrumentation disabled (no-op).
+  # Auth (AGENTO11Y_AUTH_*) belongs in a Secret, not this ConfigMap.
+  AGENTO11Y_ENDPOINT: ""
