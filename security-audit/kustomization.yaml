@@ -1,0 +1,14 @@
+# Deployed by security-audit/gitops/security-audit-config.yaml.
+# Generates the Alloy pipeline ConfigMap straight from alloy-config.alloy
+# (single source of truth) and ships the Loki ruler alert rules.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: monitoring
+resources:
+  - alerts/security-audit-rules.yaml
+configMapGenerator:
+  - name: alloy-audit-config
+    files:
+      - config.alloy=alloy-config.alloy
+generatorOptions:
+  disableNameSuffixHash: true # referenced by name from the Alloy Helm values
