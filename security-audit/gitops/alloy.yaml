@@ -17,13 +17,19 @@ spec:
     helm:
       values: |
         alloy:
+          # Pipeline lives in security-audit/alloy-config.alloy and is
+          # rendered into this ConfigMap by security-audit/kustomization.yaml
+          # (Argo CD app: security-audit-config).
           configMap:
-            create: true
-            content: |
-              # Loaded from security-audit/alloy-config.alloy — kept as a
-              # separate file in this repo (not duplicated here) so it's
-              # easy to diff/lint on its own. See that file for the full
-              # pipeline and comments.
+            create: false
+            name: alloy-audit-config
+            key: config.alloy
+          extraEnv:
+            - name: FIREHOSE_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: alloy-firehose-access-key # create out-of-band; never commit
+                  key: access-key
           extraPorts:
             - name: cw-firehose
               port: 9880
@@ -32,12 +38,8 @@ spec:
         controller:
           type: deployment
           replicas: 1
-        serviceAccount:
-          create: true
-          annotations:
-            # IRSA role granting logs:FilterLogEvents / logs:GetLogEvents on
-            # the EKS audit log group only — least privilege, read-only.
-            eks.amazonaws.com/role-arn: "arn:aws:iam::CHANGE-ME:role/alloy-audit-reader"
+    # No IRSA needed: AWS pushes to Alloy via Firehose, Alloy never calls
+    # AWS APIs. The Firehose -> Alloy hop is authenticated by the access key.
   destination:
     server: https://kubernetes.default.svc
     namespace: monitoring
