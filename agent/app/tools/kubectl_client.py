@@ -43,14 +43,22 @@ def describe_pod(namespace: str, pod: str) -> str:
 
     for cs in pod_obj.status.container_statuses or []:
         lines.append(f"- container={cs.name} ready={cs.ready} restart_count={cs.restart_count}")
-        if cs.state.waiting:
+        if cs.state and cs.state.waiting:
             lines.append(
                 f"  waiting: reason={cs.state.waiting.reason} message={cs.state.waiting.message}"
             )
-        if cs.state.terminated:
+        if cs.state and cs.state.terminated:
             lines.append(
-                f"  last_terminated: reason={cs.state.terminated.reason} "
+                f"  terminated: reason={cs.state.terminated.reason} "
                 f"exit_code={cs.state.terminated.exit_code}"
+            )
+        # In CrashLoopBackOff the *current* state is `waiting`; the exit code
+        # and reason of the crash itself live in last_state.terminated.
+        if cs.last_state and cs.last_state.terminated:
+            lt = cs.last_state.terminated
+            lines.append(
+                f"  last_terminated: reason={lt.reason} exit_code={lt.exit_code} "
+                f"finished_at={lt.finished_at}"
             )
 
     try:
